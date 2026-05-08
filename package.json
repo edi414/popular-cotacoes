@@ -15,10 +15,13 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@zxing/browser": "^0.2.0",
     "fast-xml-parser": "^4.5.0",
+    "idb": "^8.0.3",
     "next": "^16.2.6",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "tesseract.js": "^7.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
