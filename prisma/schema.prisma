@@ -53,6 +53,7 @@ model Fornecedor {
   nfes      Nfe[]
   envios    CotacaoEnvio[]
   pedidos   Pedido[]
+  sessoes   SessaoLevantamento[]
 
   @@map("fornecedor")
 }
@@ -126,8 +127,9 @@ model SessaoLevantamento {
   iniciadaEm    DateTime     @default(now()) @map("iniciada_em")
   fechadaEm     DateTime?    @map("fechada_em")
 
-  faltas    Falta[]
-  cotacoes  Cotacao[]
+  fornecedor Fornecedor? @relation(fields: [fornecedorId], references: [id])
+  faltas     Falta[]
+  cotacoes   Cotacao[]
 
   @@index([status, iniciadaEm])
   @@map("sessao_levantamento")
