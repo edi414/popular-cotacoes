@@ -1,0 +1,320 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------
+// Catalogo
+// ---------------------------------------------------------------
+
+model Produto {
+  id         String   @id @default(cuid())
+  ean        String?  @unique
+  descricao  String
+  marca      String?
+  embalagem  String?
+  ncm        String?
+  unidade    String?
+  categoria  String?
+  curvaAbc   String?  @map("curva_abc")
+  criadoEm   DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  nfeItens         NfeItem[]
+  cotacaoItens     CotacaoItem[]
+  cotacaoRespostas CotacaoResposta[]
+  faltas           Falta[]
+  pedidoItens      PedidoItem[]
+
+  @@index([descricao])
+  @@map("produto")
+}
+
+model Fornecedor {
+  id            String   @id @default(cuid())
+  cnpj          String?  @unique
+  razao         String
+  fantasia      String?
+  whatsapp      String?
+  email         String?
+  categorias    String[] @default([])
+  pedidoMinimo  Decimal? @db.Decimal(12, 2) @map("pedido_minimo")
+  ranking       Float?
+  pontualidade  Float?
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now()) @map("criado_em")
+  atualizadoEm  DateTime @updatedAt @map("atualizado_em")
+
+  nfes      Nfe[]
+  envios    CotacaoEnvio[]
+  pedidos   Pedido[]
+
+  @@map("fornecedor")
+}
+
+// ---------------------------------------------------------------
+// NF-e (entrada)
+// ---------------------------------------------------------------
+
+model Nfe {
+  id                 String   @id @default(cuid())
+  fornecedorId       String   @map("fornecedor_id")
+  chave              String   @unique
+  numero             String
+  serie              String?
+  dataEmissao        DateTime @map("data_emissao")
+  valorTotal         Decimal  @db.Decimal(14, 2) @map("valor_total")
+  condicaoPagamento  String?  @map("condicao_pagamento")
+  xmlPath            String?  @map("xml_path")
+  importadoEm        DateTime @default(now()) @map("importado_em")
+
+  fornecedor Fornecedor @relation(fields: [fornecedorId], references: [id])
+  itens      NfeItem[]
+
+  @@index([fornecedorId, dataEmissao])
+  @@map("nfe")
+}
+
+model NfeItem {
+  id          String  @id @default(cuid())
+  nfeId       String  @map("nfe_id")
+  produtoId   String  @map("produto_id")
+  descricao   String
+  ean         String?
+  marca       String?
+  embalagem   String?
+  unidade     String?
+  quantidade  Decimal @db.Decimal(14, 4)
+  valorUnit   Decimal @db.Decimal(14, 4) @map("valor_unit")
+  valorTotal  Decimal @db.Decimal(14, 2) @map("valor_total")
+
+  nfe     Nfe     @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+  produto Produto @relation(fields: [produtoId], references: [id])
+
+  @@index([produtoId])
+  @@map("nfe_item")
+}
+
+// ---------------------------------------------------------------
+// Levantamento de faltas
+// ---------------------------------------------------------------
+
+enum SessaoStatus {
+  ABERTA
+  FECHADA
+  ARQUIVADA
+}
+
+enum ModoEntrada {
+  VOZ
+  BARCODE
+  FOTO
+  MANUAL
+}
+
+model SessaoLevantamento {
+  id            String       @id @default(cuid())
+  titulo        String?
+  fornecedorId  String?      @map("fornecedor_id")
+  responsavel   String?
+  status        SessaoStatus @default(ABERTA)
+  iniciadaEm    DateTime     @default(now()) @map("iniciada_em")
+  fechadaEm     DateTime?    @map("fechada_em")
+
+  faltas    Falta[]
+  cotacoes  Cotacao[]
+
+  @@index([status, iniciadaEm])
+  @@map("sessao_levantamento")
+}
+
+model Falta {
+  id           String      @id @default(cuid())
+  sessaoId     String      @map("sessao_id")
+  produtoId    String      @map("produto_id")
+  quantidade   Decimal     @db.Decimal(12, 3)
+  modo         ModoEntrada
+  origem       String?
+  observacao   String?
+  criadoEm     DateTime    @default(now()) @map("criado_em")
+
+  sessao  SessaoLevantamento @relation(fields: [sessaoId], references: [id], onDelete: Cascade)
+  produto Produto            @relation(fields: [produtoId], references: [id])
+
+  @@index([sessaoId])
+  @@map("falta")
+}
+
+// ---------------------------------------------------------------
+// Cotacao
+// ---------------------------------------------------------------
+
+enum CotacaoStatus {
+  RASCUNHO
+  ENVIADA
+  RECEBENDO
+  EM_NEGOCIACAO
+  FECHADA
+  CANCELADA
+}
+
+enum EnvioStatus {
+  PENDENTE
+  ENVIADA
+  ABERTA
+  RESPONDIDA
+  EXPIRADA
+}
+
+model Cotacao {
+  id          String        @id @default(cuid())
+  sessaoId    String?       @map("sessao_id")
+  titulo      String?
+  prazo       DateTime?
+  status      CotacaoStatus @default(RASCUNHO)
+  criadaEm    DateTime      @default(now()) @map("criada_em")
+  fechadaEm   DateTime?     @map("fechada_em")
+
+  sessao  SessaoLevantamento? @relation(fields: [sessaoId], references: [id])
+  itens   CotacaoItem[]
+  envios  CotacaoEnvio[]
+  pedidos Pedido[]
+
+  @@map("cotacao")
+}
+
+model CotacaoItem {
+  id           String  @id @default(cuid())
+  cotacaoId    String  @map("cotacao_id")
+  produtoId    String  @map("produto_id")
+  quantidade   Decimal @db.Decimal(12, 3)
+  marcaAceita  String? @map("marca_aceita")
+  embalagem    String?
+  observacao   String?
+
+  cotacao   Cotacao           @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  produto   Produto           @relation(fields: [produtoId], references: [id])
+  respostas CotacaoResposta[]
+
+  @@index([cotacaoId])
+  @@map("cotacao_item")
+}
+
+model CotacaoEnvio {
+  id            String       @id @default(cuid())
+  cotacaoId     String       @map("cotacao_id")
+  fornecedorId  String       @map("fornecedor_id")
+  token         String       @unique
+  status        EnvioStatus  @default(PENDENTE)
+  enviadaEm     DateTime?    @map("enviada_em")
+  abertaEm      DateTime?    @map("aberta_em")
+  respondidaEm  DateTime?    @map("respondida_em")
+
+  cotacao    Cotacao           @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  fornecedor Fornecedor        @relation(fields: [fornecedorId], references: [id])
+  respostas  CotacaoResposta[]
+
+  @@index([cotacaoId])
+  @@index([token])
+  @@map("cotacao_envio")
+}
+
+model CotacaoResposta {
+  id                 String   @id @default(cuid())
+  envioId            String   @map("envio_id")
+  itemId             String   @map("item_id")
+  produtoId          String   @map("produto_id")
+  disponivel         Boolean  @default(true)
+  preco              Decimal? @db.Decimal(14, 4)
+  marca              String?
+  embalagem          String?
+  prazoEntregaDias   Int?     @map("prazo_entrega_dias")
+  condicaoPagamento  String?  @map("condicao_pagamento")
+  observacao         String?
+  vencedor           Boolean  @default(false)
+  criadoEm           DateTime @default(now()) @map("criado_em")
+  atualizadoEm       DateTime @updatedAt @map("atualizado_em")
+
+  envio   CotacaoEnvio @relation(fields: [envioId], references: [id], onDelete: Cascade)
+  item    CotacaoItem  @relation(fields: [itemId], references: [id])
+  produto Produto      @relation(fields: [produtoId], references: [id])
+
+  @@unique([envioId, itemId])
+  @@index([itemId])
+  @@map("cotacao_resposta")
+}
+
+// ---------------------------------------------------------------
+// Pedido
+// ---------------------------------------------------------------
+
+enum PedidoStatus {
+  EMITIDO
+  ENVIADO
+  CONFIRMADO
+  ENTREGUE
+  CONCILIADO
+  DIVERGENTE
+  CANCELADO
+}
+
+model Pedido {
+  id            String       @id @default(cuid())
+  cotacaoId     String       @map("cotacao_id")
+  fornecedorId  String       @map("fornecedor_id")
+  total         Decimal      @db.Decimal(14, 2)
+  status        PedidoStatus @default(EMITIDO)
+  pdfPath       String?      @map("pdf_path")
+  emitidoEm     DateTime     @default(now()) @map("emitido_em")
+  enviadoEm     DateTime?    @map("enviado_em")
+  confirmadoEm  DateTime?    @map("confirmado_em")
+  observacao    String?
+
+  cotacao    Cotacao      @relation(fields: [cotacaoId], references: [id])
+  fornecedor Fornecedor   @relation(fields: [fornecedorId], references: [id])
+  itens      PedidoItem[]
+
+  @@index([fornecedorId, emitidoEm])
+  @@map("pedido")
+}
+
+model PedidoItem {
+  id          String  @id @default(cuid())
+  pedidoId    String  @map("pedido_id")
+  produtoId   String  @map("produto_id")
+  quantidade  Decimal @db.Decimal(12, 3)
+  preco       Decimal @db.Decimal(14, 4)
+  marca       String?
+  embalagem   String?
+
+  pedido  Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  produto Produto @relation(fields: [produtoId], references: [id])
+
+  @@map("pedido_item")
+}
+
+// ---------------------------------------------------------------
+// Usuario (auth interno)
+// ---------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  COMPRADOR
+  BALCONISTA
+}
+
+model Usuario {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  nome      String
+  role      UserRole @default(BALCONISTA)
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  @@map("usuario")
+}
